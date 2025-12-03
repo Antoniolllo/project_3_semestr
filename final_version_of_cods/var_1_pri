@@ -1,0 +1,72 @@
+const int SENSOR_PIN = 2;  // цифровой вход
+
+// Вспомогательная функция для миллисекунд
+unsigned long now() {
+  return millis();
+}
+
+// Фильтр: 10 цифровых измерений → берём большинство
+bool readFiltered() {
+  int ones = 0;
+  for (int i = 0; i < 10; i++) {
+    if (digitalRead(SENSOR_PIN) == HIGH) ones++;
+  }
+  return (ones >= 5);  // ≥5 → HIGH, иначе LOW
+}
+
+// Ждём стабильный сигнал HIGH 1000 мс для синхронизации
+void waitStableHigh1000ms() {
+  unsigned long start = now();
+  while (true) {
+    if (readFiltered()) {
+      start = now();  // сигнал пропал → перезапуск
+    }
+    if (now() - start >= 1000) return; // стабильно HIGH 1 сек
+  }
+}
+
+// Ждём первого LOW (начало передачи)
+void waitForStartBitLow() {
+  while (!readFiltered()) {
+    // пока HIGH → ждём
+  }
+}
+
+// Считываем 8 бит с точным интервалом 100 мс
+uint8_t readByte() {
+  uint8_t result = 0;
+
+  for (int i = 0; i < 9; i++) {
+    unsigned long t0 = now();
+    bool bit = readFiltered();  
+    bit=!bit;   // считываем бит
+    if (i>0) result |= ((bit) << i); 
+              // LSB → MSB
+    
+    // Ждём ровно 100 мс с момента начала этого бита
+    while (now() - t0 < 100);
+  }
+
+  return result;
+}
+
+void setup() {
+  pinMode(SENSOR_PIN, INPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  // 1) Синхронизация: ждем стабильный HIGH 1 сек
+  waitStableHigh1000ms();
+
+  // 2) Ждём стартового бита LOW
+  waitForStartBitLow();
+
+  // 3) Читаем 8 бит (символ)
+  uint8_t data = readByte();
+  char c = (char)data;
+
+  // 4) Выводим символ
+  // Serial.print(c);
+  Serial.println(data, BIN);
+}

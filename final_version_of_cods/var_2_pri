@@ -1,0 +1,132 @@
+const int SENSOR_PIN = 2;  // цифровой вход
+
+unsigned long now() { return millis(); }
+
+// Фильтр: 10 цифровых измерений → берём большинство
+// ИСПРАВЛЕНО: 0 = HIGH (включен), 1 = LOW (выключен)
+bool readFiltered() {
+  int zeros = 0;  // считаем нули (HIGH)
+  for (int i = 0; i < 10; i++) {
+    if (digitalRead(SENSOR_PIN) == HIGH) zeros++;  // HIGH = 0 (включен)
+  }
+  return (zeros < 5);  // если нулей < 5 → возвращаем 1 (LOW), иначе 0 (HIGH)
+}
+
+// Ждём устойчивый сигнал LOW 1000 мс (так как 0 = HIGH, то ждём 1 = LOW)
+void waitStableLow1000ms() {
+  unsigned long start = now();
+
+  while (true) {
+    if (readFiltered() == false) {  // если обнаружили 0 (HIGH)
+      start = now();        // шум → перезапуск
+    }
+
+    if (now() - start >= 1000)
+      return;               // стабильно LOW (1) 1 сек
+  }
+}
+
+// Ждём первого единичного бита — старт (1 = LOW)
+void waitForStartBitOne() {
+  while (readFiltered() == false) {  // ждём, пока станет 1 (LOW)
+    // продолжаем ждать, пока не станет HIGH (0)
+  }
+}
+
+uint8_t readByte() {
+  uint8_t result = 0;
+
+  for (int i = 0; i < 8; i++) {
+    unsigned long t0 = now();
+
+    // Ждём 100 мс к точке выборки
+    while (now() - t0 < 100);
+
+    bool bit = readFiltered();
+    result |= (bit << i);
+  }
+
+  return result;
+}
+
+// Функция для декодирования байта в символ и обработки сообщения
+void decodeAndProcessByte(uint8_t data) {
+  static String receivedMessage = "";
+  
+  // Декодируем байт в символ ASCII
+  char receivedChar = (char)data;
+  
+  // Проверяем, является ли символ печатным ASCII (32-126)
+  if (data >= 32 && data <= 126) {
+    receivedMessage += receivedChar;
+    Serial.print("Декодирован символ: '");
+    Serial.print(receivedChar);
+    Serial.print("' (ASCII: ");
+    Serial.print(data);
+    Serial.print(", BIN: ");
+    Serial.print(data, BIN);
+    Serial.println(")");
+    
+    // Выводим текущее сообщение
+    Serial.print("Текущее сообщение: ");
+    Serial.println(receivedMessage);
+    
+    // Если символ конца строки или максимальная длина
+    if (receivedChar == '\n'  receivedChar == '\0'  receivedMessage.length() >= 50) {
+      Serial.println("=== ПОЛНОЕ СООБЩЕНИЕ ===");
+      Serial.println(receivedMessage);
+      Serial.println("=======================");
+      receivedMessage = "";  // Сброс для следующего сообщения
+    }
+  } 
+  else if (data == 0) {
+    // Нулевой байт - разделитель сообщений
+    if (receivedMessage.length() > 0) {
+      Serial.println("=== ПОЛНОЕ СООБЩЕНИЕ ===");
+      Serial.println(receivedMessage);
+      Serial.println("=======================");
+      receivedMessage = "";
+    }
+  }
+  else {
+    // Некорректный символ
+    Serial.print("Некорректный байт: ");
+    Serial.print(data);
+    Serial.print(" (0x");
+    Serial.print(data, HEX);
+    Serial.println(")");
+  }
+}
+
+void setup() {
+  pinMode(SENSOR_PIN, INPUT);
+  Serial.begin(9600);
+  Serial.println("Приемник готов к работе...");
+  Serial.println("Логика: 0 = HIGH (включен), 1 = LOW (выключен)");
+}
+
+void loop() {
+  // 1) Ждём стабильный сигнал LOW (1) 1000 мс
+  waitStableLow1000ms();
+
+  // 2) Ждём стартового бита 1 (LOW)
+  waitForStartBitOne();
+
+  // 3) Читаем 8 бит
+  uint8_t data = readByte();
+
+  // 4) Выводим байт в бинарном виде
+  Serial.print("Получен байт: ");
+  Serial.print(data, BIN);
+  Serial.print(" (DEC: ");
+  Serial.print(data);
+  Serial.print(", HEX: 0x");
+  Serial.print(data, HEX);
+  Serial.println(")");
+
+  // 5) Декодируем и обрабатываем байт
+  decodeAndProcessByte(data);
+
+  // Пауза перед следующим приемом
+  delay(500);
+}

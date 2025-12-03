@@ -1,0 +1,114 @@
+#include <Arduino.h>
+
+#define LASER_PIN 2
+
+#define DOT_DURATION 200
+#define DASH_DURATION 600
+#define SYMBOL_GAP 200
+#define LETTER_GAP 600
+#define WORD_GAP 1400
+
+typedef struct {
+    char character;
+    const char *morse_code;
+} morse_char_t;
+
+static const morse_char_t morse_table[] = {
+    {'A', ".-"},    {'B', "-..."},  {'C', "-.-."},  {'D', "-.."},
+    {'E', "."},     {'F', "..-."},  {'G', "--."},   {'H', "...."},
+    {'I', ".."},    {'J', ".---"},  {'K', "-.-"},   {'L', ".-.."},
+    {'M', "--"},    {'N', "-."},    {'O', "---"},   {'P', ".--."},
+    {'Q', "--.-"},  {'R', ".-."},   {'S', "..."},   {'T', "-"},
+    {'U', "..-"},   {'V', "...-"},  {'W', ".--"},   {'X', "-..-"},
+    {'Y', "-.--"},  {'Z', "--.."},
+    {'0', "-----"}, {'1', ".----"}, {'2', "..---"}, {'3', "...--"},
+    {'4', "....-"}, {'5', "....."}, {'6', "-...."}, {'7', "--..."},
+    {'8', "---.."}, {'9', "----."},
+    {' ', "/"},
+};
+
+#define MORSE_TABLE_SIZE (sizeof(morse_table) / sizeof(morse_char_t))
+
+const char* char_to_morse(char c) {
+    c = toupper(c);
+    
+    for (int i = 0; i < MORSE_TABLE_SIZE; i++) {
+        if (morse_table[i].character == c) {
+            return morse_table[i].morse_code;
+        }
+    }
+    
+    return NULL;
+}
+
+void send_dot() {
+    digitalWrite(LASER_PIN, HIGH);
+    delay(DOT_DURATION);
+    digitalWrite(LASER_PIN, LOW);
+    delay(SYMBOL_GAP);
+}
+
+void send_dash() {
+    digitalWrite(LASER_PIN, HIGH);
+    delay(DASH_DURATION);
+    digitalWrite(LASER_PIN, LOW);
+    delay(SYMBOL_GAP);
+}
+
+void send_char(char c) {
+    const char *morse_sequence = char_to_morse(c);
+    
+    if (morse_sequence == NULL) return;
+    
+    Serial.print("Передаю: ");
+    Serial.print(c);
+    Serial.print(" -> ");
+    Serial.println(morse_sequence);
+    
+    for (int i = 0; morse_sequence[i] != '\0'; i++) {
+        switch (morse_sequence[i]) {
+            case '.':
+                send_dot();
+                break;
+            case '-':
+                send_dash();
+                break;
+            case '/':
+                delay(WORD_GAP - LETTER_GAP);
+                break;
+        }
+    }
+    delay(LETTER_GAP - SYMBOL_GAP);
+}
+
+void setup() {
+    Serial.begin(9600);
+    pinMode(LASER_PIN, OUTPUT);
+    
+    Serial.println("Лазерный передатчик Морзе");
+    Serial.println("Лазер горит 10 секунд...");
+    
+    digitalWrite(LASER_PIN, HIGH);
+    delay(10000);
+    digitalWrite(LASER_PIN, LOW);
+    
+    Serial.println("Готов к передаче. Введите сообщение:");
+}
+
+void loop() {
+    if (Serial.available() > 0) {
+        String message = Serial.readStringUntil('\n');
+        message.trim();
+        message.toUpperCase();
+        
+        Serial.print("Передаю сообщение: ");
+        Serial.println(message);
+        
+        for (int i = 0; i < message.length(); i++) {
+            send_char(message[i]);
+            delay(3000);
+        }
+        
+        Serial.println("Передача завершена");
+    }
+}

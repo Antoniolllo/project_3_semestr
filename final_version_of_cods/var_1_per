@@ -1,0 +1,36 @@
+// ПИН ЛАЗЕРА
+const int LASER_PIN = 2;
+
+void setup() {
+  pinMode(LASER_PIN, OUTPUT);
+  digitalWrite(LASER_PIN, HIGH);
+
+  // 10 секунд на настройку
+  delay(10000);
+}
+
+void sendBit(bool b) {
+  digitalWrite(LASER_PIN, b ? HIGH : LOW);
+  delay(100);  // интервал между битами
+}
+
+void sendByte(uint8_t value) {
+  // Первый бит всегда 0
+  sendBit(0);
+
+  // Далее 7 бит (или все 8, но первый всегда ноль)
+  for (int i = 0; i < 7; i++) {
+    bool bitValue = (value >> i) & 1;
+    sendBit(bitValue);
+  }
+
+  // Пауза между символами
+  digitalWrite(LASER_PIN, HIGH);
+  delay(1500);
+}
+
+void loop() {
+  // отправляем заглушку: 0,1,0,1,0,1,0,1...
+  // например, 0b01010101 = 85
+  sendByte(0b11100001);
+}
